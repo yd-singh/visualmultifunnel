@@ -53,8 +53,13 @@ def main():
             display_comparative_results(all_results, comparative_stats, selected_configs)
 
 def display_single_configuration(config_name, results_df, summary_stats, config_file):
+    # Display configuration flow graph at the top
+    st.header(f"Configuration Flow for {config_name}")
+    config_graph = create_config_graph(config_file)
+    st.graphviz_chart(config_graph)
+    
     # Display summary statistics
-    st.header(f"Summary Statistics for {config_name}")
+    st.subheader("Summary Statistics")
     st.markdown(summary_stats['text'])
 
     # Display detailed module results
@@ -64,11 +69,6 @@ def display_single_configuration(config_name, results_df, summary_stats, config_
     # Generate and display visualizations
     st.subheader("Visualizations")
     generate_visualizations(results_df, config_name)
-
-    # Display the configuration graph
-    st.markdown("#### Configuration Flow")
-    config_graph = create_config_graph(config_file)
-    st.graphviz_chart(config_graph)
 
 def display_comparative_results(all_results, comparative_stats, selected_configs):
     st.header("Comparative Analysis of Selected Configurations")
@@ -92,15 +92,16 @@ def display_comparative_results(all_results, comparative_stats, selected_configs
     st.subheader("Individual Configuration Details")
     for i, (config_name, results_df, summary_stats, config_file) in enumerate(all_results):
         with st.expander(f"Details for {config_name}"):
+            # Display the configuration graph
+            st.markdown("#### Configuration Flow")
+            config_graph = create_config_graph(config_file)
+            st.graphviz_chart(config_graph)
             st.markdown(summary_stats['text'])
             st.dataframe(results_df)
             # Generate visualizations for each configuration
             generate_visualizations(results_df, config_name)
 
-            # Display the configuration graph
-            st.markdown("#### Configuration Flow")
-            config_graph = create_config_graph(config_file)
-            st.graphviz_chart(config_graph)
+
 
 def generate_visualizations(results_df, config_name):
     # Sankey Diagram
@@ -151,21 +152,44 @@ def generate_comparative_visualizations(comparison_df):
     st.pyplot(fig_time)
 
 def create_sankey_diagram(results_df, config_name):
+    import plotly.graph_objects as go
+
     # Prepare nodes and labels
     modules = results_df['Module'].tolist()
     labels = ['Start'] + modules + ['Success', 'Failed']
     label_indices = {label: idx for idx, label in enumerate(labels)}
 
+    # Define node colors
+    node_colors = []
+    mid_funnel_colors = ['#1f77b4']  # Blue color for mid-funnel nodes
+    # If you want different colors for mid-funnel nodes, define them here:
+    # mid_funnel_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
+
+    mid_funnel_index = 0
+    for label in labels:
+        if label == 'Start':
+            node_colors.append('white')
+        elif label == 'Success':
+            node_colors.append('green')
+        elif label == 'Failed':
+            node_colors.append('red')
+        else:
+            # Assign colors to mid-funnel nodes
+            node_colors.append(mid_funnel_colors[mid_funnel_index % len(mid_funnel_colors)])
+            mid_funnel_index += 1
+
     sources = []
     targets = []
     values = []
     link_labels = []
+    link_colors = []
 
     # Start node to first module
     sources.append(label_indices['Start'])
     targets.append(label_indices[modules[0]])
     values.append(results_df.loc[0, 'Enter Funnel'])
     link_labels.append(f"{results_df.loc[0, 'Enter Funnel']} customers")
+    link_colors.append('grey')  # Default color for links from Start node
 
     # Iterate over modules
     for idx, row in results_df.iterrows():
@@ -180,42 +204,49 @@ def create_sankey_diagram(results_df, config_name):
             next_module_name = row['Next Module on Success'] or 'Success'
             if next_module_name == "Success":
                 target_idx = label_indices['Success']
+                link_color = 'green'  # Link to Success node
             else:
                 target_idx = label_indices.get(next_module_name, label_indices['Success'])
+                link_color = 'grey'  # Default link color
             sources.append(current_idx)
             targets.append(target_idx)
             values.append(pass_count)
             percentage = (pass_count / enter_funnel) * 100
             link_labels.append(f"{pass_count} ({percentage:.1f}%) passed")
+            link_colors.append(link_color)
 
         # On failure
         if fail_count > 0:
             next_module_name = row['Next Module on Failure'] or 'Failed'
             if next_module_name == "Failed":
                 target_idx = label_indices['Failed']
+                link_color = 'red'  # Link to Failed node
             else:
                 target_idx = label_indices.get(next_module_name, label_indices['Failed'])
+                link_color = 'grey'  # Default link color
             sources.append(current_idx)
             targets.append(target_idx)
             values.append(fail_count)
             percentage = (fail_count / enter_funnel) * 100
             link_labels.append(f"{fail_count} ({percentage:.1f}%) failed")
+            link_colors.append(link_color)
 
     # Create the Sankey diagram
     fig = go.Figure(data=[go.Sankey(
-        arrangement = "snap",
+        arrangement="snap",
         node=dict(
             pad=15,
             thickness=20,
             line=dict(color="black", width=0.5),
             label=labels,
-            color="blue"
+            color=node_colors
         ),
         link=dict(
             source=sources,
             target=targets,
             value=values,
-            label=link_labels
+            label=link_labels,
+            color=link_colors
         ))])
 
     fig.update_layout(title_text=f"Sankey Diagram for {config_name}", font_size=10)
