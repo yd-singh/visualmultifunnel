@@ -92,7 +92,7 @@ def display_module_form(module_id, module):
             # Module Name
             name_input = st.text_input("Module Name", value=module['name'])
             # Standardize module name
-            name = name_input.strip().upper().replace(' ', '_')
+            name = name_input.strip().replace(' ', '_')
             # Ensure the module name is unique
             existing_names = [m['name'] for mid, m in st.session_state.modules.items() if mid != module_id]
             if name in existing_names and name != '':
@@ -120,18 +120,18 @@ def display_module_form(module_id, module):
             next_module_on_success_input = st.text_input(
                 "Next Module on Success",
                 value=module['next_module_on_success'],
-                help="Enter module name or 'APPROVED'/'REJECTED' for terminal steps."
+                help="Enter module name or 'Success'/'Failed' for terminal steps."
             )
-            next_module_on_success = next_module_on_success_input.strip().upper().replace(' ', '_')
+            next_module_on_success = next_module_on_success_input.strip().replace(' ', '_')
             module['next_module_on_success'] = next_module_on_success
 
             # Next Module on Failure
             next_module_on_failure_input = st.text_input(
                 "Next Module on Failure",
                 value=module['next_module_on_failure'],
-                help="Enter module name or 'APPROVED'/'REJECTED' for terminal steps."
+                help="Enter module name or 'Success'/'Failed' for terminal steps."
             )
-            next_module_on_failure = next_module_on_failure_input.strip().upper().replace(' ', '_')
+            next_module_on_failure = next_module_on_failure_input.strip().replace(' ', '_')
             module['next_module_on_failure'] = next_module_on_failure
 
             # Submit and Delete buttons
@@ -144,7 +144,7 @@ def display_module_form(module_id, module):
             if submit:
                 # Handle new modules specified in next modules
                 for next_module_name in [next_module_on_success, next_module_on_failure]:
-                    if next_module_name and next_module_name not in ['APPROVED', 'REJECTED']:
+                    if next_module_name and next_module_name not in ['Success', 'Failed']:
                         # Check if the module already exists
                         existing_module_names = [m['name'] for m in st.session_state.modules.values()]
                         if next_module_name not in existing_module_names:
@@ -206,19 +206,19 @@ def create_config_graph(modules_dict):
             if next_failure:
                 graph_lines.append(f'"{current_module}" -> "{next_failure}" [label="Failure", color="red"];')
 
-    # Add APPROVED and REJECTED nodes if they are used
-    approved_used = any(
-        m['next_module_on_success'] == 'APPROVED' or m['next_module_on_failure'] == 'APPROVED'
+    # Add Success and Failed nodes if they are used
+    success_used = any(
+        m['next_module_on_success'] == 'Success' or m['next_module_on_failure'] == 'Success'
         for m in modules if m['name'] != ''
     )
-    rejected_used = any(
-        m['next_module_on_success'] == 'REJECTED' or m['next_module_on_failure'] == 'REJECTED'
+    failed_used = any(
+        m['next_module_on_success'] == 'Failed' or m['next_module_on_failure'] == 'Failed'
         for m in modules if m['name'] != ''
     )
-    if approved_used:
-        graph_lines.append('"APPROVED" [shape=doublecircle, style=filled, color="green"];')
-    if rejected_used:
-        graph_lines.append('"REJECTED" [shape=doublecircle, style=filled, color="red"];')
+    if success_used:
+        graph_lines.append('"Success" [shape=doublecircle, style=filled, color="green"];')
+    if failed_used:
+        graph_lines.append('"Failed" [shape=doublecircle, style=filled, color="red"];')
 
     # Start node to the start modules
     start_modules = [module['name'] for module in modules if module['is_start'] and module['name'] != '']
