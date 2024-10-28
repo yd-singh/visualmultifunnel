@@ -30,7 +30,8 @@ class Funnel:
         columns = [
             "Module", "Enter Funnel", "Success Rate", "Pass", "Fail",
             "Final Success", "Terminally Rejected", "Total Cost", "Total Time",
-            "Average Cost per Customer", "Average Time per Customer"
+            "Average Cost per Customer", "Average Time per Customer",
+            "Next Module on Success", "Next Module on Failure"
         ]
         results = pd.DataFrame(columns=columns)
         data = []
@@ -119,3 +120,68 @@ class Funnel:
         print(f"Average Time per Customer: {average_time_per_customer_minutes:.2f} minutes")
 
         return results, summary_stats
+
+    def build_graph(self):
+        graph = {}
+        for module in self.modules.values():
+            graph[module.name] = []
+            if module.next_module_on_success:
+                graph[module.name].append((module.next_module_on_success, 'success'))
+            if module.next_module_on_failure:
+                graph[module.name].append((module.next_module_on_failure, 'failure'))
+        # Add 'Success' and 'Failed' nodes
+        graph['Success'] = []
+        graph['Failed'] = []
+        return graph
+
+    def get_all_paths(self):
+        graph = self.build_graph()
+        start_module = self.start_module.name
+        paths = []
+        self._dfs(graph, start_module, [], paths)
+        return paths
+
+    def _dfs(self, graph, current_module, path, paths):
+        if not path:
+            # For the start module, we don't have an outcome yet
+            path = []
+        if current_module == 'Success' or current_module == 'Failed':
+            paths.append(path + [(current_module, None)])
+            return
+        if current_module not in graph:
+            return
+        for next_module, outcome in graph[current_module]:
+            self._dfs(graph, next_module, path + [(current_module, outcome)], paths)
+
+    def compute_path_metrics(self):
+        paths = self.get_all_paths()
+        path_metrics = []
+        for path in paths:
+            probability = 1.0
+            total_cost = 0.0
+            total_time = 0.0
+            path_str = ''
+            end_node = ''
+            for i, (module_name, outcome) in enumerate(path):
+                if module_name == 'Success' or module_name == 'Failed':
+                    end_node = module_name
+                    continue
+                module = self.modules[module_name]
+                if outcome == 'success':
+                    probability *= module.success_rate
+                elif outcome == 'failure':
+                    probability *= (1 - module.success_rate)
+                else:
+                    continue
+                total_cost += module.cost_per_transaction
+                total_time += module.time_to_complete
+                path_str += f"{module_name} ({outcome}) -> "
+            path_str += end_node
+            path_metrics.append({
+                'Path': path_str,
+                'End': end_node,
+                'Probability': probability,
+                'Total Cost': total_cost,
+                'Total Time': total_time
+            })
+        return path_metrics
