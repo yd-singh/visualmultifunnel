@@ -31,12 +31,12 @@ def main():
 
         for config_file in selected_configs:
             # Run simulation for each selected configuration
-            results_df, summary_stats = simulate_onboarding(customers_count, config_file)
+            results_df, summary_stats, path_metrics = simulate_onboarding(customers_count, config_file)
             config_name = os.path.basename(config_file)
             config_name = os.path.splitext(config_name)[0]
 
             # Collect results and statistics
-            all_results.append((config_name, results_df, summary_stats, config_file))
+            all_results.append((config_name, results_df, summary_stats, config_file, path_metrics))
 
             # Extract key statistics for comparison
             stats = summary_stats['metrics']
@@ -46,13 +46,13 @@ def main():
         # Display comparative results
         if len(selected_configs) == 1:
             # Single configuration selected
-            config_name, results_df, summary_stats, config_file = all_results[0]
-            display_single_configuration(config_name, results_df, summary_stats, config_file)
+            config_name, results_df, summary_stats, config_file, path_metrics = all_results[0]
+            display_single_configuration(config_name, results_df, summary_stats, config_file, path_metrics, customers_count)
         else:
             # Multiple configurations selected
-            display_comparative_results(all_results, comparative_stats, selected_configs)
+            display_comparative_results(all_results, comparative_stats, selected_configs, customers_count)
 
-def display_single_configuration(config_name, results_df, summary_stats, config_file):
+def display_single_configuration(config_name, results_df, summary_stats, config_file, path_metrics, customers_count):
     # Display configuration flow graph at the top
     st.header(f"Configuration Flow for {config_name}")
     config_graph = create_config_graph(config_file)
@@ -62,6 +62,11 @@ def display_single_configuration(config_name, results_df, summary_stats, config_
     st.subheader("Summary Statistics")
     st.markdown(summary_stats['text'])
 
+    # Generate pie chart
+    st.markdown("#### Success vs Failure")
+    fig_pie = create_success_pie_chart(summary_stats['metrics'])
+    st.pyplot(fig_pie)
+
     # Display detailed module results
     st.subheader("Detailed Module Results")
     st.dataframe(results_df)
@@ -70,7 +75,63 @@ def display_single_configuration(config_name, results_df, summary_stats, config_
     st.subheader("Visualizations")
     generate_visualizations(results_df, config_name)
 
-def display_comparative_results(all_results, comparative_stats, selected_configs):
+    # Display path analysis
+    st.subheader("Path Analysis")
+    path_metrics_df = pd.DataFrame(path_metrics)
+    path_metrics_df['Total Time (minutes)'] = path_metrics_df['Total Time'] / 60
+    path_metrics_df['Expected Customers'] = path_metrics_df['Probability'] * customers_count
+    st.dataframe(path_metrics_df)
+
+    # Identify the requested funnels (successful only)
+    st.subheader("Funnel Insights")
+    # Filter only successful funnels
+    success_funnels = path_metrics_df[path_metrics_df['End'] == 'Success']
+    if not success_funnels.empty:
+        # Fastest Successful Funnel
+        fastest_funnel = success_funnels.sort_values('Total Time').iloc[0]
+        st.markdown(f"**Fastest Successful Funnel:** {fastest_funnel['Path']}")
+        st.markdown(f"- Total Time: {fastest_funnel['Total Time (minutes)']:.2f} minutes")
+        st.markdown(f"- Total Cost: ₹{fastest_funnel['Total Cost']:.2f}")
+        st.markdown(f"- Success Rate: {fastest_funnel['Probability']*100:.2f}%")
+
+        # Cheapest Successful Funnel
+        cheapest_funnel = success_funnels.sort_values('Total Cost').iloc[0]
+        st.markdown(f"**Cheapest Successful Funnel:** {cheapest_funnel['Path']}")
+        st.markdown(f"- Total Cost: ₹{cheapest_funnel['Total Cost']:.2f}")
+        st.markdown(f"- Total Time: {cheapest_funnel['Total Time (minutes)']:.2f} minutes")
+        st.markdown(f"- Success Rate: {cheapest_funnel['Probability']*100:.2f}%")
+
+        # Funnel with Best Success Rate
+        best_success_funnel = success_funnels.sort_values('Probability', ascending=False).iloc[0]
+        st.markdown(f"**Funnel with Best Success Rate:** {best_success_funnel['Path']}")
+        st.markdown(f"- Success Rate: {best_success_funnel['Probability']*100:.2f}%")
+        st.markdown(f"- Total Cost: ₹{best_success_funnel['Total Cost']:.2f}")
+        st.markdown(f"- Total Time: {best_success_funnel['Total Time (minutes)']:.2f} minutes")
+
+        # Slowest Successful Funnel
+        slowest_funnel = success_funnels.sort_values('Total Time', ascending=False).iloc[0]
+        st.markdown(f"**Slowest Successful Funnel:** {slowest_funnel['Path']}")
+        st.markdown(f"- Total Time: {slowest_funnel['Total Time (minutes)']:.2f} minutes")
+        st.markdown(f"- Total Cost: ₹{slowest_funnel['Total Cost']:.2f}")
+        st.markdown(f"- Success Rate: {slowest_funnel['Probability']*100:.2f}%")
+
+        # Most Expensive Successful Funnel
+        most_expensive_funnel = success_funnels.sort_values('Total Cost', ascending=False).iloc[0]
+        st.markdown(f"**Most Expensive Successful Funnel:** {most_expensive_funnel['Path']}")
+        st.markdown(f"- Total Cost: ₹{most_expensive_funnel['Total Cost']:.2f}")
+        st.markdown(f"- Total Time: {most_expensive_funnel['Total Time (minutes)']:.2f} minutes")
+        st.markdown(f"- Success Rate: {most_expensive_funnel['Probability']*100:.2f}%")
+
+        # Worst Conversion Funnel
+        worst_conversion_funnel = success_funnels.sort_values('Probability').iloc[0]
+        st.markdown(f"**Worst Conversion Funnel:** {worst_conversion_funnel['Path']}")
+        st.markdown(f"- Success Rate: {worst_conversion_funnel['Probability']*100:.2f}%")
+        st.markdown(f"- Total Cost: ₹{worst_conversion_funnel['Total Cost']:.2f}")
+        st.markdown(f"- Total Time: {worst_conversion_funnel['Total Time (minutes)']:.2f} minutes")
+    else:
+        st.markdown("**No successful funnels found.**")
+
+def display_comparative_results(all_results, comparative_stats, selected_configs, customers_count):
     st.header("Comparative Analysis of Selected Configurations")
 
     # Create a DataFrame for comparative statistics
@@ -90,7 +151,7 @@ def display_comparative_results(all_results, comparative_stats, selected_configs
 
     # Optionally, allow the user to view individual configuration details
     st.subheader("Individual Configuration Details")
-    for i, (config_name, results_df, summary_stats, config_file) in enumerate(all_results):
+    for i, (config_name, results_df, summary_stats, config_file, path_metrics) in enumerate(all_results):
         with st.expander(f"Details for {config_name}"):
             # Display the configuration graph
             st.markdown("#### Configuration Flow")
@@ -100,8 +161,20 @@ def display_comparative_results(all_results, comparative_stats, selected_configs
             st.dataframe(results_df)
             # Generate visualizations for each configuration
             generate_visualizations(results_df, config_name)
-
-
+            # Display path analysis
+            st.markdown("#### Path Analysis")
+            path_metrics_df = pd.DataFrame(path_metrics)
+            path_metrics_df['Total Time (minutes)'] = path_metrics_df['Total Time'] / 60
+            path_metrics_df['Expected Customers'] = path_metrics_df['Probability'] * customers_count
+            st.dataframe(path_metrics_df)
+            # Display funnel insights for each configuration
+            st.markdown("#### Funnel Insights")
+            success_funnels = path_metrics_df[path_metrics_df['End'] == 'Success']
+            if not success_funnels.empty:
+                # You can replicate the funnel insights code here if desired
+                pass
+            else:
+                st.markdown("**No successful funnels found.**")
 
 def generate_visualizations(results_df, config_name):
     # Sankey Diagram
@@ -151,6 +224,16 @@ def generate_comparative_visualizations(comparison_df):
     )
     st.pyplot(fig_time)
 
+def create_success_pie_chart(metrics):
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots()
+    labels = ['Success', 'Failed']
+    sizes = [metrics['Total Success'], metrics['Total Failures']]
+    colors = ['green', 'red']
+    ax.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%', startangle=90)
+    ax.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
+    return fig
+
 def create_sankey_diagram(results_df, config_name):
     import plotly.graph_objects as go
 
@@ -161,20 +244,26 @@ def create_sankey_diagram(results_df, config_name):
 
     # Define node colors
     node_colors = []
-    mid_funnel_colors = ['#1f77b4']  # Blue color for mid-funnel nodes
-    # If you want different colors for mid-funnel nodes, define them here:
-    # mid_funnel_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
+    start_color = '#f2f2f2'  # Light gray for Start
+    success_color = '#66cdaa'  # Soft green for Success
+    failure_color = '#ff7f7f'  # Soft red for Failed
+    mid_funnel_colors = [
+        '#e6e6fa', '#d8bfd8', '#dda0dd', '#da70d6', '#ba55d3',
+        '#9932cc', '#9400d3', '#8a2be2', '#9370db', '#7b68ee',
+        '#6a5acd', '#483d8b', '#4169e1', '#3a5fcd', '#3333ff',
+        '#1e90ff', '#00bfff', '#87cefa', '#add8e6', '#b0e0e6',
+    ]  # Gradient blues for mid-funnel nodes
 
     mid_funnel_index = 0
     for label in labels:
         if label == 'Start':
-            node_colors.append('white')
+            node_colors.append(start_color)
         elif label == 'Success':
-            node_colors.append('green')
+            node_colors.append(success_color)
         elif label == 'Failed':
-            node_colors.append('red')
+            node_colors.append(failure_color)
         else:
-            # Assign colors to mid-funnel nodes
+            # Assign gradient colors to mid-funnel nodes
             node_colors.append(mid_funnel_colors[mid_funnel_index % len(mid_funnel_colors)])
             mid_funnel_index += 1
 
@@ -189,7 +278,7 @@ def create_sankey_diagram(results_df, config_name):
     targets.append(label_indices[modules[0]])
     values.append(results_df.loc[0, 'Enter Funnel'])
     link_labels.append(f"{results_df.loc[0, 'Enter Funnel']} customers")
-    link_colors.append('grey')  # Default color for links from Start node
+    link_colors.append('gray')  # Neutral color for links from Start node
 
     # Iterate over modules
     for idx, row in results_df.iterrows():
@@ -204,10 +293,10 @@ def create_sankey_diagram(results_df, config_name):
             next_module_name = row['Next Module on Success'] or 'Success'
             if next_module_name == "Success":
                 target_idx = label_indices['Success']
-                link_color = 'green'  # Link to Success node
+                link_color = 'rgba(102, 205, 170, 0.7)'  # Soft transparent green
             else:
                 target_idx = label_indices.get(next_module_name, label_indices['Success'])
-                link_color = 'grey'  # Default link color
+                link_color = 'rgba(128, 128, 128, 0.5)'  # Transparent gray
             sources.append(current_idx)
             targets.append(target_idx)
             values.append(pass_count)
@@ -220,10 +309,10 @@ def create_sankey_diagram(results_df, config_name):
             next_module_name = row['Next Module on Failure'] or 'Failed'
             if next_module_name == "Failed":
                 target_idx = label_indices['Failed']
-                link_color = 'red'  # Link to Failed node
+                link_color = 'rgba(255, 127, 127, 0.7)'  # Soft transparent red
             else:
                 target_idx = label_indices.get(next_module_name, label_indices['Failed'])
-                link_color = 'grey'  # Default link color
+                link_color = 'rgba(128, 128, 128, 0.5)'  # Transparent gray
             sources.append(current_idx)
             targets.append(target_idx)
             values.append(fail_count)
@@ -237,7 +326,7 @@ def create_sankey_diagram(results_df, config_name):
         node=dict(
             pad=15,
             thickness=20,
-            line=dict(color="black", width=0.5),
+            line=dict(color="black", width=1),
             label=labels,
             color=node_colors
         ),
@@ -249,7 +338,7 @@ def create_sankey_diagram(results_df, config_name):
             color=link_colors
         ))])
 
-    fig.update_layout(title_text=f"Sankey Diagram for {config_name}", font_size=10)
+    fig.update_layout(title_text=f"Sankey Diagram for {config_name}", font=dict(size=10))
     return fig
 
 def create_time_distribution_chart(results_df):
