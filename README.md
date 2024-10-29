@@ -215,7 +215,6 @@ Features
 
 Demo
 
-Note: Replace ./images/dashboard_screenshot.png with the path to an actual screenshot of your dashboard.
 
 Getting Started
 
