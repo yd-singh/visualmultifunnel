@@ -1,0 +1,7 @@
+pandas
+pyyaml
+tabulate
+plotly
+matplotlib
+seaborn
+streamlit
